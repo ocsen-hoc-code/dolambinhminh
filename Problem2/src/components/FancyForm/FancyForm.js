@@ -39,6 +39,7 @@ const FancyForm = () => {
         if (currencyToSend && currencyToReceive && amountToSend) {
             updateAmountToReceive(amountToSend);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currencyToSend, currencyToReceive]);
 
     const handleAmountChange = (e) => {
