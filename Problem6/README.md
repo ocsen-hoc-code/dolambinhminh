@@ -72,7 +72,7 @@ This module is designed to manage and update a live scoreboard for a website, en
 
 ### Get Top API (`/api/top`)
 
-- **Description**: Retrieves the top 10 users with the highest scores from the system.
+- **Description**: Retrieves the top 10 users with the highest scores from the database. If the top_scores key does not exist in Redis, it will be created and populated with the top user list. If the top_scores key already exists in Redis, the data will be retrieved from there and returned to the user.
 - **Request**:
   - `GET /api/top`
 - **Response**:
@@ -80,7 +80,7 @@ This module is designed to manage and update a live scoreboard for a website, en
 
 ### Action API (`/api/action`)
 
-- **Description**: Increases the user's score upon completion of an action. Validates the JWT, updates the user's score, and refreshes the top scores list if necessary.
+- **Description**: Checks if the JWT is valid; if not, the process is skipped. If valid, the user's score is increased in the database upon successful action execution. The top 10 scores stored in Redis are then checked. If the new score is higher than any existing entry in the top 10, it is inserted into the list, sorted in descending order, and the lowest score is removed. The updated ranking is sent via the API notification to update the frontend display. If the new score is not higher than any in the top 10, it is ignored.
 - **Request**:
   - `POST /api/action`
   - Headers: `Authorization: Bearer <jwt_token>`
@@ -91,7 +91,7 @@ This module is designed to manage and update a live scoreboard for a website, en
 
 ### Notification API (`/api/notification`)
 
-- **Description**: Sends real-time updates to users using Socket.io. Requires an active WebSocket connection to receive notifications.
+- **Description**: Sends real-time updates of the highest-scoring user, provided by the Action API, to the frontend. The frontend adds the user to the top 10 list on the dashboard, removes the lowest-scoring entry, and sorts the list in ascending order.
 - **Request**:
   - **WebSocket** connection required.
 - **Response**:
@@ -100,19 +100,40 @@ This module is designed to manage and update a live scoreboard for a website, en
 ## How the API Works
 
 1. **User Registration & Confirmation**:
-   - Users register by providing an email and password. A confirmation email with a token is sent. The email is confirmed using the token, activating the user account.
+  - Users register by providing an email and password via the /api/register endpoint.
+  - If the email is already in use and activated, an error is returned. If it exists but is not activated, a confirmation email is resent.
+  - A confirmation email with a token is sent, and the user confirms their email via /api/confirm?token=yourtoken.
+  - Upon successful confirmation, the user's account is activated.
 
 2. **User Login & OAuth2 Login**:
-   - Users log in with their email and password or via OAuth2. Successful authentication returns a JWT token for managing user sessions.
+  - Users authenticate using their email and password via /api/login.
+  - Alternatively, users can log in via OAuth2 using an access token through /api/oauth2/login.
+  - Successful authentication returns a JWT token, which is used for managing user sessions.
 
 3. **Password Management**:
-   - Users can request a password reset, which sends a reset email with a token. The password is reset using the token.
+  - If a user forgets their password, they can request a reset link via /api/forgot, which sends a reset email if the email exists in the system.
+  - Users reset their password using the token provided in the email via /api/reset.
 
 4. **Score Management**:
-   - Actions performed by users are processed to update scores. The top 10 scores are managed and updated accordingly. The `Get Top` API retrieves these scores.
+  - Users perform actions that impact their scores through /api/action.
+  - The API validates the user's JWT token before processing the action.
+  - If valid, the user's score is updated in the database.
+  - The system checks the top 10 scores stored in Redis:
+    + If the new score is higher than any in the top 10, it is inserted, the list is sorted in descending order, and the lowest score is removed.
+    + If the score does not exceed any in the top 10, it is ignored.
+  - The updated leaderboard is sent via API notification to refresh the frontend.
 
-5. **Notifications**:
-   - Real-time score updates and other notifications are sent to clients via Socket.io WebSocket connections.
+5. **Retrieving Top Scores**
+  - The /api/top endpoint retrieves the top 10 users with the highest scores.
+  - If the top_scores key does not exist in Redis, it is created and populated from the database.
+  - If the top_scores key exists, data is retrieved from Redis for a faster response.
+
+6. **Notifications**:
+  - High-score updates are sent in real time via WebSocket connections using Socket.io.
+  - When a user achieves a top 10 score, an event is triggered, updating the top 10 list on the frontend dashboard.
+  - The lowest-scoring entry is removed, and the list is re-sorted in ascending order.
+  - The new top 10 list is broadcast to all connected clients.
+
 
 ## Database Design
 
